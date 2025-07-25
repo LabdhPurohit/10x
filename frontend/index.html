@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en" class="bg-gray-900 text-white">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Labdh Puroiht - Wall Robot Trajectory</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    input, canvas {
+      transition: all 0.3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen p-6 font-sans">
+
+  <div class="max-w-5xl mx-auto bg-gray-800 p-8 rounded-2xl shadow-xl ring-1 ring-gray-700">
+    <h1 class="text-4xl font-bold mb-10 text-center text-indigo-400">Wall Robot Trajectory Planner</h1>
+
+    <div class="grid md:grid-cols-2 gap-8 mb-10">
+      <!-- Wall Dimensions -->
+      <div class="bg-gray-700 p-6 rounded-xl shadow-md">
+        <h2 class="text-2xl font-semibold mb-4 text-white">Wall Dimensions</h2>
+        <div class="space-y-4">
+          <div>
+            <label for="wallWidth" class="block text-sm text-gray-300">Width (m)</label>
+            <input type="number" id="wallWidth" value="5" class="w-full p-3 rounded-md bg-gray-900 text-white border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+          </div>
+          <div>
+            <label for="wallHeight" class="block text-sm text-gray-300">Height (m)</label>
+            <input type="number" id="wallHeight" value="5" class="w-full p-3 rounded-md bg-gray-900 text-white border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- Obstacles -->
+      <div class="bg-gray-700 p-6 rounded-xl shadow-md">
+        <h2 class="text-2xl font-semibold mb-4 text-white">Obstacles</h2>
+        <div id="obstaclesContainer" class="space-y-4">
+          <!-- First Obstacle (default) -->
+          <div class="obstacle-item grid grid-cols-2 gap-4 md:grid-cols-4 items-end">
+            <div>
+              <label class="text-sm text-gray-300">X (m)</label>
+              <input type="number" id="obsX_0" value="2" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-sm text-gray-300">Y (m)</label>
+              <input type="number" id="obsY_0" value="2" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-sm text-gray-300">Width (m)</label>
+              <input type="number" id="obsWidth_0" value="0.25" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+              <label class="text-sm text-gray-300">Height (m)</label>
+              <input type="number" id="obsHeight_0" value="0.25" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+            </div>
+          </div>
+        </div>
+        <button onclick="addObstacle()" class="mt-4 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 transition rounded-lg text-white font-medium">+ Add Obstacle</button>
+      </div>
+    </div>
+
+    <!-- Generate Button -->
+    <div class="text-center mb-8">
+      <button id="generateTrajectory" class="bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-xl transition transform hover:-translate-y-1">
+        Generate Trajectory
+      </button>
+    </div>
+
+    <!-- Visualization -->
+    <div class="bg-gray-700 rounded-xl p-6 shadow-inner mb-6">
+      <h2 class="text-xl font-semibold mb-4 text-center text-gray-300">Robot Path Visualization</h2>
+      <div class="flex justify-center">
+        <canvas id="canvas" width="800" height="600" class="rounded-xl border border-gray-600 bg-gray-900"></canvas>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="flex justify-center gap-4">
+      <button id="playBtn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition">▶ Play</button>
+      <button id="pauseBtn" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-md transition">⏸ Pause</button>
+      <button id="resetBtn" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md transition">🔄 Reset</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let scale = 100;
+    let trajectoryData = [];
+    let animationFrameId;
+    let currentPointIndex = 0;
+
+    function drawRobot(x, y) {
+      ctx.fillStyle = "#00f";
+      ctx.beginPath();
+      ctx.arc(x * scale, canvas.height - y * scale, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawWallAndObstacles(wallWidth, wallHeight, obstacles) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = "#ccc";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(0, canvas.height - wallHeight * scale, wallWidth * scale, wallHeight * scale);
+      ctx.fillStyle = "#ff6347"; // obstacle color
+      obstacles.forEach(obs => {
+        ctx.fillRect(obs.x * scale, canvas.height - (obs.y + obs.height) * scale, obs.width * scale, obs.height * scale);
+      });
+    }
+
+    function animateTrajectory() {
+      if (currentPointIndex < trajectoryData.length) {
+        const p = trajectoryData[currentPointIndex];
+        drawWallAndObstacles(parseFloat(document.getElementById('wallWidth').value), parseFloat(document.getElementById('wallHeight').value), getObstacles());
+        for (let i = 0; i <= currentPointIndex; i++) {
+          const pt = trajectoryData[i];
+          ctx.fillStyle = "rgba(0, 123, 255, 0.4)";
+          ctx.fillRect(pt.x * scale, canvas.height - pt.y * scale, 2, 2);
+        }
+        drawRobot(p.x, p.y);
+        currentPointIndex++;
+        animationFrameId = requestAnimationFrame(animateTrajectory);
+      } else {
+        cancelAnimationFrame(animationFrameId);
+      }
+    }
+
+    document.getElementById('generateTrajectory').addEventListener('click', () => {
+      const wallWidth = document.getElementById('wallWidth').value;
+      const wallHeight = document.getElementById('wallHeight').value;
+      const obstacles = getObstacles();
+
+      fetch('/trajectory/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ width: parseFloat(wallWidth), height: parseFloat(wallHeight), obstacles })
+      })
+      .then(res => res.json())
+      .then(data => {
+        trajectoryData = data;
+        resetAnimation();
+        animateTrajectory();
+      })
+      .catch(err => console.error("Error:", err));
+    });
+
+    document.getElementById('playBtn').addEventListener('click', () => {
+      if (!animationFrameId) animateTrajectory();
+    });
+
+    document.getElementById('pauseBtn').addEventListener('click', () => {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    });
+
+    document.getElementById('resetBtn').addEventListener('click', resetAnimation);
+
+    function resetAnimation() {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+      currentPointIndex = 0;
+      drawWallAndObstacles(parseFloat(document.getElementById('wallWidth').value), parseFloat(document.getElementById('wallHeight').value), getObstacles());
+      if (trajectoryData.length > 0) {
+        drawRobot(trajectoryData[0].x, trajectoryData[0].y);
+      }
+    }
+
+    function getObstacles() {
+      const obstacles = [];
+      document.querySelectorAll('.obstacle-item').forEach(item => {
+        const x = parseFloat(item.querySelector('[id^="obsX_"]').value);
+        const y = parseFloat(item.querySelector('[id^="obsY_"]').value);
+        const width = parseFloat(item.querySelector('[id^="obsWidth_"]').value);
+        const height = parseFloat(item.querySelector('[id^="obsHeight_"]').value);
+        if (!isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height)) {
+          obstacles.push({ x, y, width, height });
+        }
+      });
+      return obstacles;
+    }
+
+    let obstacleCount = 1;
+    function addObstacle() {
+      const container = document.getElementById('obstaclesContainer');
+      const html = `
+        <div class="obstacle-item grid grid-cols-2 gap-4 md:grid-cols-4 items-end">
+          <div><label class="text-sm text-gray-300">X (m)</label><input type="number" id="obsX_${obstacleCount}" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600"></div>
+          <div><label class="text-sm text-gray-300">Y (m)</label><input type="number" id="obsY_${obstacleCount}" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600"></div>
+          <div><label class="text-sm text-gray-300">Width (m)</label><input type="number" id="obsWidth_${obstacleCount}" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600"></div>
+          <div><label class="text-sm text-gray-300">Height (m)</label><input type="number" id="obsHeight_${obstacleCount}" class="w-full p-2 rounded-md bg-gray-900 text-white border border-gray-600"></div>
+        </div>`;
+      container.insertAdjacentHTML('beforeend', html);
+      obstacleCount++;
+    }
+
+    drawWallAndObstacles(parseFloat(document.getElementById('wallWidth').value), parseFloat(document.getElementById('wallHeight').value), getObstacles());
+  </script>
+</body>
+</html>
