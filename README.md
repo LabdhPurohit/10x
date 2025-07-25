@@ -2,6 +2,9 @@
 
 This project implements a database-driven control system for an autonomous wall-finishing robot. It includes a backend API for data management and coverage planning, and a frontend for 2D visualization of the robot's trajectory.
 
+## Live Link:
+- http://104.154.67.158:8000
+
 ## Project Structure
 
 - `main.py`: The FastAPI application entry point, defining API endpoints for trajectory planning and data retrieval.
